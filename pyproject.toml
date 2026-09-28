@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xgplib-workers"
+version = "0.1.0"
+description = "Hexagonal worker that synchronizes the Xbox Game Pass catalog."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.0",
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/domain", "src/application", "src/infrastructure"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = [
+    ".agents",
+    ".claude",
+    ".opencode",
+    "_bmad",
+    "_bmad-output",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]
+
+[tool.importlinter]
+root_packages = ["domain", "application", "infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "Hexagonal dependency rule"
+type = "layers"
+layers = ["infrastructure", "application", "domain"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

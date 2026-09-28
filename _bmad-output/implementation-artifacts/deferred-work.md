@@ -1,0 +1,3 @@
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md`
+  summary: Architecture spine AD-1 still credits Ruff for import linting, but boundary enforcement is actually implemented with import-linter.
+  evidence: `_bmad-output/planning-artifacts/architecture/architecture-xgplib-workers-2026-08-26/ARCHITECTURE-SPINE.md` (AD-1) names "Ruff for styling and import linting"; Ruff cannot scope banned imports by source path, so `pyproject.toml` uses an import-linter `layers` contract instead. Surfaced during the Story 1.1 review; planning artifacts are not edited by the build workflow, so the spine should be refreshed by a future architecture pass.
