@@ -2,7 +2,7 @@
 title: 'Story 1.1: Establish Project Skeleton & Hexagonal Boundaries'
 type: 'feature'
 created: '2026-09-28'
-status: 'done'
+status: 'in-progress'
 review_loop_iteration: 0
 baseline_commit: '077034dd7b364b4269fec9f0f978ed73f29f0cf1'
 context: ['{project-root}/AGENTS.md']
@@ -40,13 +40,13 @@ context: ['{project-root}/AGENTS.md']
 
 Existing (read-only context):
 - `AGENTS.md` -- repo policy: Conventional Commits, TDD-first, PEP-8, prefer automated linters.
-- `_bmad-output/implementation-artifacts/epic-1-context.md` -- Epic 1 boundaries and technical decisions.
 - `_bmad-output/planning-artifacts/epics.md` -- Story 1.1 acceptance criteria (Project Foundation epic).
 - `_bmad-output/planning-artifacts/architecture/architecture-xgplib-workers-2026-08-26/ARCHITECTURE-SPINE.md` -- AD-1 (boundary enforcement), AD-6 (foundational stack).
 - `.editorconfig`, `.gitattributes` -- UTF-8, LF, final newline, trim trailing whitespace.
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` -- key `1-1-establish-project-skeleton-hexagonal-boundaries` (workflow-managed, do not hand-edit).
 
 To create:
+- `_bmad-output/implementation-artifacts/epic-1-context.md` -- Epic 1 boundaries and technical decisions (workflow-generated companion artifact).
 - `pyproject.toml` -- project metadata, build/package discovery for the three `src/` packages, dev deps, and tool config (Ruff, import-linter, pytest).
 - `.python-version` -- pin `3.12`.
 - `.gitignore` -- ignore `.venv/`, `__pycache__/`, `*.py[cod]`, `.pytest_cache/`, `.ruff_cache/`, `dist/`, `build/`.
@@ -73,6 +73,20 @@ To create:
 - Given a module in `src/domain` or `src/application` importing `infrastructure`, when I run `uv run lint-imports`, then it fails and names the broken contract.
 - Given the clean project, when I run `uv run lint-imports`, then all contracts are kept.
 - Given a push or pull request, when CI runs on Python 3.12, then lint, boundary, and test steps all pass.
+
+### Review Findings
+
+- [x] [Review][Decision] Story status disagrees across artifacts — spec frontmatter is `status: 'done'` / `review_loop_iteration: 0` with no `## Review Triage Log` or `followup_review_recommended`, while `sprint-status.yaml` sets the story to `review` and `epic-1` to `in-progress`. A human must choose the canonical state. [_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md:5] [_bmad-output/implementation-artifacts/sprint-status.yaml:41] — resolved 2026-09-28: keep the story open; spec frontmatter aligned to `review`.
+- [x] [Review][Patch] Real layering contract is never direction-verified — the direction-sensitive negative controls run `lint-imports --config <tmp>/pyproject.toml` against the duplicated literal `_LAYERS_CONTRACT` (and `_LAYERS_CONTRACT` is never checked for parity with `pyproject.toml`). Inverting the real `layers = ["infrastructure", "application", "domain"]` order ships undetected: the real check still prints `KEPT`, `test_layering_contract_is_kept` still passes, and a `domain → infrastructure` import would no longer break the contract. `test_layering_contract_is_kept` asserts only the contract name and the string `KEPT`, and the negative controls accept any non-zero exit rather than an actual `BROKEN` verdict. [tests/test_layers.py:26-34,67-79,127-148]
+- [x] [Review][Patch] Boundary coverage is one-directional — only `domain → infrastructure` and `application → infrastructure` are exercised; the also-forbidden `domain → application` direction and the permitted directions (`application → domain`, `infrastructure → application/domain`) are untested. [tests/test_layers.py:127-148]
+- [x] [Review][Patch] `test_layer_package_is_importable` asserts only `module.__name__ == layer`, which is trivially true once `importlib.import_module` succeeds; it does not check `module.__file__` resolves under `src/<layer>`, so an identically named site-packages package would satisfy it. [tests/test_layers.py:47-51]
+- [x] [Review][Patch] `_build_layer_project` silently ignores `bodies` keys that are not in `layers`, so a typo or a key for a skipped layer produces a compliant project and a vacuously passing negative control. [tests/test_layers.py:82-95]
+- [x] [Review][Patch] `_tool_executable` fallback checks the bare console-script name without platform suffixes; on Windows (supported by uv) a tool present only as `name.exe` in the env's Scripts dir is reported missing. [tests/test_layers.py:54-64]
+- [x] [Review][Patch] CI job has no `timeout-minutes` or `permissions:`, and `actions/checkout@v4` / `astral-sh/setup-uv@v5` are referenced by mutable tags rather than SHAs. [.github/workflows/ci.yml:1-39]
+- [x] [Review][Patch] "Suggested Review Order" anchors point at the wrong lines: `.gitignore:7` is `venv/` (the import-linter cache is line 18) and `README.md:27` is the Commands table separator, not the contributor entry point. [_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md:153,156]
+- [x] [Review][Patch] Spec Code Map lists `epic-1-context.md` as "Existing (read-only context)" although the same change creates it. [_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md:43]
+- [x] [Review][Defer] Architecture spine AD-1 and Epic 1 context still credit Ruff for import linting and reject "heavyweight architecture tests", while the change implements an import-linter `layers` contract plus a 197-line subprocess test suite; `deferred-work.md` records only the Ruff-wording part and leaves the "no heavyweight architecture tests" clause and `epic-1-context.md` uncorrected. [_bmad-output/planning-artifacts/architecture/architecture-xgplib-workers-2026-08-26/ARCHITECTURE-SPINE.md:24] [_bmad-output/implementation-artifacts/epic-1-context.md:18] — deferred, pre-existing
+- [x] [Review][Defer] The `layers` contract constrains only the three first-party packages; once Story 1.2/1.3 add SQLAlchemy/Pydantic, nothing mechanically stops `domain` or `application` from importing those third-party libraries, so the decoupling goal has no guard. [pyproject.toml:38-44] — deferred, pre-existing
 
 ## Spec Change Log
 
@@ -150,7 +164,7 @@ To create:
   [`.python-version:1`](../../.python-version#L1)
 
 - Ignores the import-linter cache so it is never committed.
-  [`.gitignore:7`](../../.gitignore#L7)
+  [`.gitignore:18`](../../.gitignore#L18)
 
 - Contributor entry point: setup, commands, and enforced layout.
-  [`README.md:27`](../../README.md#L27)
+  [`README.md:15`](../../README.md#L15)

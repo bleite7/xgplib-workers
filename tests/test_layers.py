@@ -2,9 +2,11 @@
 
 These tests make the architecture invariants executable:
 
-* every layer is an importable top-level package,
-* ``import-linter`` keeps the inward-only dependency rule on the real project,
+* every layer is an importable top-level package backed by ``src/<layer>``,
+* the shipped ``[tool.importlinter]`` contract pins the inward-only direction,
+* ``import-linter`` keeps that contract on the real project,
 * a domain or application module importing infrastructure breaks the contract,
+* the permitted inward direction (higher layers importing lower ones) stays green,
 * a stylistically broken file fails Ruff, and
 * a missing layer is reported instead of silently skipped.
 """
@@ -16,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -43,12 +46,55 @@ type = "layers"
 layers = ["infrastructure", "application", "domain"]
 """
 
+_EXPECTED_CONTRACT = {
+    "name": "Hexagonal dependency rule",
+    "type": "layers",
+    "layers": ["infrastructure", "application", "domain"],
+}
+
+
+def _shipped_importlinter_config() -> dict:
+    """Parse the shipped ``[tool.importlinter]`` table from ``pyproject.toml``."""
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as config_file:
+        return tomllib.load(config_file)["tool"]["importlinter"]
+
 
 @pytest.mark.parametrize("layer", LAYERS)
 def test_layer_package_is_importable(layer: str) -> None:
-    """Each hexagonal layer must exist as an importable top-level package."""
+    """Each layer must be importable and resolve to its own ``src/<layer>``."""
     module = importlib.import_module(layer)
+    module_file = getattr(module, "__file__", None)
+
     assert module.__name__ == layer
+    assert module_file is not None
+    assert Path(module_file).resolve().parent == (PROJECT_ROOT / "src" / layer)
+
+
+def test_shipped_contract_pins_inward_direction() -> None:
+    """The shipped contract must forbid the outward direction, not merely exist."""
+    config = _shipped_importlinter_config()
+
+    assert config["root_packages"] == list(LAYERS)
+    contracts = [
+        contract
+        for contract in config["contracts"]
+        if contract.get("name") == _EXPECTED_CONTRACT["name"]
+    ]
+    assert len(contracts) == 1, contracts
+    assert contracts[0]["type"] == _EXPECTED_CONTRACT["type"]
+    assert contracts[0]["layers"] == _EXPECTED_CONTRACT["layers"]
+
+
+def test_throwaway_contract_matches_shipped_contract() -> None:
+    """The negative-control copy must not drift from the shipped contract."""
+    shipped = _shipped_importlinter_config()
+    [shipped_contract] = shipped["contracts"]
+
+    throwaway = tomllib.loads(_LAYERS_CONTRACT)["tool"]["importlinter"]
+    [throwaway_contract] = throwaway["contracts"]
+
+    assert throwaway["root_packages"] == shipped["root_packages"]
+    assert throwaway_contract == shipped_contract
 
 
 def _tool_executable(name: str) -> str:
@@ -57,9 +103,11 @@ def _tool_executable(name: str) -> str:
     if executable is not None:
         return executable
 
-    candidate = Path(sys.executable).parent / name
-    if candidate.exists():
-        return str(candidate)
+    bin_dir = Path(sys.executable).parent
+    for suffix in ("", ".exe", ".cmd", ".bat"):
+        candidate = bin_dir / f"{name}{suffix}"
+        if candidate.is_file():
+            return str(candidate)
 
     pytest.fail(f"{name} executable not found in PATH or the active environment")
 
@@ -74,9 +122,11 @@ def test_layering_contract_is_kept() -> None:
         timeout=120,
     )
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Hexagonal dependency rule" in result.stdout + result.stderr
-    assert "KEPT" in result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "Hexagonal dependency rule" in output
+    assert "KEPT" in output
+    assert "BROKEN" not in output
 
 
 def _build_layer_project(
@@ -88,6 +138,8 @@ def _build_layer_project(
     """Create a throwaway layered project for contract-failure scenarios."""
     (root / "pyproject.toml").write_text(_LAYERS_CONTRACT, encoding="utf-8")
     bodies = bodies or {}
+    unknown = set(bodies) - set(layers)
+    assert not unknown, f"bodies reference unknown layer(s): {sorted(unknown)}"
     for layer in layers:
         package = root / "src" / layer
         package.mkdir(parents=True, exist_ok=True)
@@ -124,16 +176,30 @@ def test_compliant_project_is_kept(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _assert_contract_broken(result: subprocess.CompletedProcess[str]) -> None:
+    """A violation must break the named contract, not fail for another reason."""
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert "Hexagonal dependency rule" in output
+    assert "BROKEN" in output
+
+
 def test_domain_may_not_import_infrastructure(tmp_path: Path) -> None:
     """A domain module importing infrastructure must break the contract."""
     project = _build_layer_project(
         tmp_path, bodies={"domain": "from infrastructure import __name__\n"}
     )
 
-    result = _lint_imports_in(project)
+    _assert_contract_broken(_lint_imports_in(project))
 
-    assert result.returncode != 0, result.stdout + result.stderr
-    assert "Hexagonal dependency rule" in result.stdout + result.stderr
+
+def test_domain_may_not_import_application(tmp_path: Path) -> None:
+    """A domain module importing application must break the contract."""
+    project = _build_layer_project(
+        tmp_path, bodies={"domain": "from application import __name__\n"}
+    )
+
+    _assert_contract_broken(_lint_imports_in(project))
 
 
 def test_application_may_not_import_infrastructure(tmp_path: Path) -> None:
@@ -142,10 +208,25 @@ def test_application_may_not_import_infrastructure(tmp_path: Path) -> None:
         tmp_path, bodies={"application": "from infrastructure import __name__\n"}
     )
 
+    _assert_contract_broken(_lint_imports_in(project))
+
+
+def test_permitted_inward_dependencies_are_kept(tmp_path: Path) -> None:
+    """Higher layers may import lower ones; that direction must stay green."""
+    project = _build_layer_project(
+        tmp_path,
+        bodies={
+            "application": "from domain import __name__\n",
+            "infrastructure": (
+                "from application import __name__\nfrom domain import __name__\n"
+            ),
+        },
+    )
+
     result = _lint_imports_in(project)
 
-    assert result.returncode != 0, result.stdout + result.stderr
-    assert "Hexagonal dependency rule" in result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "KEPT" in result.stdout + result.stderr
 
 
 def test_unresolved_layer_is_reported(tmp_path: Path) -> None:
