@@ -3,12 +3,15 @@
 These tests make the architecture invariants executable:
 
 * every layer is an importable top-level package backed by ``src/<layer>``,
+* every package under ``src/`` is declared as a ``root_packages`` entry,
 * the shipped ``[tool.importlinter]`` contract pins the inward-only direction,
+* the throwaway and unresolved-layer contracts do not drift from the shipped one,
 * ``import-linter`` keeps that contract on the real project,
-* a domain or application module importing infrastructure breaks the contract,
+* a domain or application module importing any higher layer breaks the contract,
 * the permitted inward direction (higher layers importing lower ones) stays green,
-* a stylistically broken file fails Ruff, and
-* a missing layer is reported instead of silently skipped.
+* a declared layer that cannot be imported is reported instead of silently skipped,
+* a stylistically broken file fails Ruff with the expected diagnostic, and
+* the CI merge gate still exists and still runs every verification command.
 """
 
 from __future__ import annotations
@@ -59,6 +62,17 @@ def _shipped_importlinter_config() -> dict:
         return tomllib.load(config_file)["tool"]["importlinter"]
 
 
+def _named_layers_contract(config: dict) -> dict:
+    """Return the boundary contract by name, ignoring any other contracts."""
+    contracts = [
+        contract
+        for contract in config["contracts"]
+        if contract.get("name") == _EXPECTED_CONTRACT["name"]
+    ]
+    assert len(contracts) == 1, contracts
+    return contracts[0]
+
+
 @pytest.mark.parametrize("layer", LAYERS)
 def test_layer_package_is_importable(layer: str) -> None:
     """Each layer must be importable and resolve to its own ``src/<layer>``."""
@@ -75,26 +89,35 @@ def test_shipped_contract_pins_inward_direction() -> None:
     config = _shipped_importlinter_config()
 
     assert config["root_packages"] == list(LAYERS)
-    contracts = [
-        contract
-        for contract in config["contracts"]
-        if contract.get("name") == _EXPECTED_CONTRACT["name"]
-    ]
-    assert len(contracts) == 1, contracts
-    assert contracts[0]["type"] == _EXPECTED_CONTRACT["type"]
-    assert contracts[0]["layers"] == _EXPECTED_CONTRACT["layers"]
+    contract = _named_layers_contract(config)
+    assert contract["type"] == _EXPECTED_CONTRACT["type"]
+    assert contract["layers"] == _EXPECTED_CONTRACT["layers"]
+
+
+def test_declared_root_packages_cover_src_layers() -> None:
+    """Every ``src/`` package is declared, so no layer can escape the contract."""
+    config = _shipped_importlinter_config()
+    packages_on_disk = {
+        path.name
+        for path in (PROJECT_ROOT / "src").iterdir()
+        if path.is_dir() and not path.name.startswith("__")
+    }
+
+    assert set(config["root_packages"]) == packages_on_disk
 
 
 def test_throwaway_contract_matches_shipped_contract() -> None:
-    """The negative-control copy must not drift from the shipped contract."""
+    """The negative-control copies must not drift from the shipped contract."""
     shipped = _shipped_importlinter_config()
-    [shipped_contract] = shipped["contracts"]
+    shipped_contract = _named_layers_contract(shipped)
 
     throwaway = tomllib.loads(_LAYERS_CONTRACT)["tool"]["importlinter"]
-    [throwaway_contract] = throwaway["contracts"]
-
     assert throwaway["root_packages"] == shipped["root_packages"]
-    assert throwaway_contract == shipped_contract
+    assert _named_layers_contract(throwaway) == shipped_contract
+
+    unresolved = tomllib.loads(_UNRESOLVED_LAYER_CONTRACT)["tool"]["importlinter"]
+    assert unresolved["root_packages"] == [*shipped["root_packages"], "missing_layer"]
+    assert _named_layers_contract(unresolved) == shipped_contract
 
 
 def _tool_executable(name: str) -> str:
@@ -109,7 +132,10 @@ def _tool_executable(name: str) -> str:
         if candidate.is_file():
             return str(candidate)
 
-    pytest.fail(f"{name} executable not found in PATH or the active environment")
+    pytest.fail(
+        f"{name} executable not found in PATH or the active environment; "
+        "run the suite with `uv run pytest`"
+    )
 
 
 def test_layering_contract_is_kept() -> None:
@@ -259,6 +285,7 @@ def test_ruff_flags_style_violation(tmp_path: Path) -> None:
         timeout=120,
     )
     assert check.returncode != 0, check.stdout + check.stderr
+    assert "F401" in check.stdout + check.stderr
 
     unformatted = tmp_path / "unformatted.py"
     unformatted.write_text("x=1\n", encoding="utf-8")
@@ -276,3 +303,27 @@ def test_ruff_flags_style_violation(tmp_path: Path) -> None:
         timeout=120,
     )
     assert fmt.returncode != 0, fmt.stdout + fmt.stderr
+    assert "would be reformatted" in fmt.stdout + fmt.stderr
+
+
+def test_ci_workflow_runs_the_verification_gate() -> None:
+    """The merge gate must exist, trigger on PRs, and run every check.
+
+    The workflow was deleted by accident once (commit ``20fcb23``) while the
+    whole suite stayed green, so its presence is asserted rather than assumed.
+    """
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "push:" in workflow
+    assert "pull_request:" in workflow
+    assert 'python-version: "3.12"' in workflow
+    for command in (
+        "uv sync --locked",
+        "uv run ruff check .",
+        "uv run ruff format --check .",
+        "uv run lint-imports",
+        "uv run pytest",
+    ):
+        assert command in workflow, command

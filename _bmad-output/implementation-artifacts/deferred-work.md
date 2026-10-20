@@ -1,8 +1,14 @@
 # Deferred Work
 
-_No open items._
+## Open
 
----
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md`
+  summary: `.gitignore` carries no `.env`/secret patterns, and the worker will hold Microsoft/IGDB credentials.
+  evidence: Surfaced by the Story 1.1 review (2026-10-20) and deferred because no config or credential file exists until Story 1.2. Real risk once Pydantic configuration lands: a committed `.env` would leak credentials that the ignore file does not cover. Add `.env`, `.env.*` with a `!.env.example` exception alongside the configuration work.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-1-establish-project-skeleton-hexagonal-boundaries.md`
+  summary: `[project]` metadata is incomplete — no authors, keywords, classifiers, urls, or `[project.scripts]` entrypoint.
+  evidence: Deferred from the Story 1.1 review (2026-10-20): no runnable entrypoint is in scope (hourly scheduling lands in Story 2.4), and release metadata is packaging polish rather than skeleton/boundaries. Revisit when the worker gains its entrypoint.
 
 ## Resolved
 
