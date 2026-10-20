@@ -115,7 +115,8 @@ So that use cases receive dependencies as abstractions without hardcoded infrast
 **When** the worker starts
 **Then** config is validated via Pydantic and invalid config fails fast
 **And** the DI container resolves ports to their adapter implementations
-**And** an import-linter `forbidden` contract with `include_external_packages = true` forbids `pydantic` (and every other runtime dependency) in `src/domain` and `src/application`
+**And** an import-linter `forbidden` contract for `src/domain` and `src/application` forbids an enumerated list of top-level import names, with `include_external_packages = true` set at the top of `[tool.importlinter]`
+**And** the forbidden list is closed against `[project].dependencies`: a test fails when a declared runtime dependency has no entry in the list
 **And** a negative-control test proves that contract breaks when `domain` imports `pydantic`
 
 ### Story 1.3: Game Domain Model, Persistence Port & Database Schema
