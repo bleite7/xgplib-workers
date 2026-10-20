@@ -18,3 +18,9 @@ dist/
 .import_linter_cache/
 .coverage
 htmlcov/
+
+# Generated agent tooling artifacts
+.agents/skills
+.claude/skills
+.opencode/commands
+.github/agents
