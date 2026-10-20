@@ -15,7 +15,8 @@ Establish the runnable hexagonal worker base that every later capability depends
 ## Requirements & Constraints
 
 - Enforce Hexagonal Architecture and Clean Code so external APIs and the database stay decoupled from core synchronization logic.
-- Layer boundaries follow folder convention (`src/domain`, `src/application`, `src/infrastructure`); domain and application code must not import infrastructure. Enforce this via Ruff (styling and import linting) rather than heavyweight architecture tests.
+- Layer boundaries follow folder convention (`src/domain`, `src/application`, `src/infrastructure`); domain and application code must not import infrastructure. Enforcement is mechanical: an import-linter `layers` contract in `pyproject.toml` plus executable negative controls in `tests/test_layers.py`. Ruff covers style and formatting only, and those boundary tests are intentional, not removable weight.
+- The inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries. SQLAlchemy, Pydantic and HTTP/DB drivers live in `infrastructure` and are reached through ports. Guarded by an import-linter `forbidden` contract with `include_external_packages = true`, added in Story 1.2 (Pydantic) and extended in Story 1.3 (SQLAlchemy/driver).
 - Configuration (PostgreSQL connection, IGDB and Microsoft credentials, cron interval) is validated at startup and fails fast on invalid or missing values.
 - Dependencies are supplied as abstractions; no hardcoded concrete infrastructure inside use cases.
 - Domain and application layers signal errors via explicit custom domain exceptions; translation into infrastructure concerns (logging, queue NACKs, HTTP codes) happens only at the outermost adaptation layer.
@@ -29,7 +30,7 @@ Establish the runnable hexagonal worker base that every later capability depends
 - Ports are defined with Python's native `abc.ABC`, giving fail-fast instantiation when an adapter omits a required method.
 - Dependency injection is orchestrated through a DI container framework (not manual wiring), standardizing how components receive abstractions as the project scales.
 - Use cases orchestrate state mutation imperatively: retrieve entities through ports, invoke domain logic on the entity, then explicitly call the port to persist the new state.
-- Foundational stack: SQLAlchemy for ORM and persistence, Pydantic for DTOs and configuration validation, Ruff for unified linting and formatting.
+- Foundational stack: SQLAlchemy for ORM and persistence, Pydantic for DTOs and configuration validation, Ruff for unified linting and formatting, import-linter for the layer contracts.
 - Data model: a Game domain entity, an `abc.ABC` repository port, and migrations that create a games table with a JSON/JSONB metadata column.
 - Domain exceptions (a general domain error plus specific ones such as entity-not-found) live in the domain/application layers; adapters translate them outward.
 

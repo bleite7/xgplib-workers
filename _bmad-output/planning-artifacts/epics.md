@@ -41,12 +41,13 @@ FR-3: Data Storage & State Management
 
 ### Additional Requirements
 
-- Hexagonal boundaries enforced by folder convention (src/domain, src/application, src/infrastructure), validated via Ruff.
+- Hexagonal boundaries enforced by folder convention (src/domain, src/application, src/infrastructure) plus an import-linter `layers` contract in `pyproject.toml`, proven by negative-control tests in `tests/test_layers.py`. Ruff covers style and formatting only.
+- Inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries; guarded by an import-linter `forbidden` contract (`include_external_packages = true`) that grows as dependencies land (Story 1.2, Story 1.3).
 - Dependency Injection orchestrated via a DI container framework.
 - Ports defined with Python native `abc.ABC`.
 - Use cases orchestrate state mutation imperatively (retrieve entity → invoke domain logic → call port `save`).
 - Custom Domain Exceptions raised in domain/application; adapters/entrypoints translate them to infra responses.
-- Foundational stack: SQLAlchemy (ORM), Pydantic (DTOs/config), Ruff (lint/format).
+- Foundational stack: SQLAlchemy (ORM), Pydantic (DTOs/config), Ruff (lint/format), import-linter (layer contracts).
 - Two-step Microsoft extraction: fetch IDs from `catalog.gamepass.com/sigls/v2` (Console/PC/EA Play), then hydrate via `displaycatalog.mp.microsoft.com/v7.0/products` in batches of 200.
 - **Open item:** FR-1.1 mentions "cloud" platform and subscription plans (Core/Standard/Ultimate), but the discovered endpoints only cover Console, PC, and EA Play. Cloud/plan filtering has no documented endpoint IDs yet — left open (not a V1 blocking decision).
 
@@ -114,6 +115,8 @@ So that use cases receive dependencies as abstractions without hardcoded infrast
 **When** the worker starts
 **Then** config is validated via Pydantic and invalid config fails fast
 **And** the DI container resolves ports to their adapter implementations
+**And** an import-linter `forbidden` contract with `include_external_packages = true` forbids `pydantic` (and every other runtime dependency) in `src/domain` and `src/application`
+**And** a negative-control test proves that contract breaks when `domain` imports `pydantic`
 
 ### Story 1.3: Game Domain Model, Persistence Port & Database Schema
 
@@ -127,6 +130,7 @@ So that persistence contracts and flexible metadata schema are in place.
 **When** a migration runs
 **Then** a games table is created with a JSON/JSONB metadata column
 **And** domain exceptions (e.g., DomainError, EntityNotFound) are defined and raised by domain/application layers
+**And** the `forbidden` contract is extended to cover `sqlalchemy` and the PostgreSQL driver, with a negative-control test for each
 
 ## Epic 2: Microsoft Catalog Ingestion
 

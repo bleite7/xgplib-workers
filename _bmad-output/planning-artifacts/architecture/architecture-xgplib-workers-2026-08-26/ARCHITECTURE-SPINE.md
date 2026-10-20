@@ -2,7 +2,7 @@
 title: "Architecture Spine: xgplib-workers"
 type: "architecture-spine"
 status: "final"
-updated: "2026-08-26"
+updated: "2026-10-20"
 ---
 
 # Architecture Spine: xgplib-workers
@@ -21,7 +21,11 @@ This project adheres strictly to **Clean Code and Hexagonal Architecture (Ports 
 ### AD-1: Boundary Enforcement
 - **Binds:** Dependency Rule Enforcement.
 - **Prevents:** Architectural drift where domain logic implicitly couples to infrastructure.
-- **Rule:** Boundaries are enforced by folder convention (`src/domain`, `src/application`, `src/infrastructure`). This is validated continuously via static analysis tools (specifically **Ruff** for styling and import linting) and rigorous Code Review. We prioritize convention and fast linters over complex architectural testing frameworks.
+- **Rule:** Boundaries are enforced in three layers, each mechanical:
+  1. **Folder convention** — the layers live at exactly `src/domain`, `src/application`, `src/infrastructure`.
+  2. **Declarative contract** — the `layers` contract in `[tool.importlinter]` (`pyproject.toml`, listed top-to-bottom as highest→lowest: `infrastructure`, `application`, `domain`) fails the build when a lower layer imports a higher one. **Ruff** covers style and formatting only; it cannot scope banned imports by source module, so it is not the boundary mechanism.
+  3. **Executable proof** — `tests/test_layers.py` pins the shipped contract by name, checks parity between the shipped and throwaway contracts, and exercises negative controls for every forbidden direction (`domain → infrastructure`, `domain → application`, `application → infrastructure`) plus a positive control for the permitted inward directions.
+- **Note:** the subprocess-based boundary tests are deliberate, not accidental weight. They caught an inverted `layers` order that the declarative contract alone reported as kept (`37bb259`). Do not remove them as "heavyweight".
 
 ### AD-2: Dependency Injection Strategy
 - **Binds:** Dependency Injection Orchestration.
@@ -50,6 +54,15 @@ This project adheres strictly to **Clean Code and Hexagonal Architecture (Ports 
   - **SQLAlchemy:** For ORM and persistence in the Infrastructure layer.
   - **Pydantic:** For Data Transfer Objects (DTOs) and configuration validation.
   - **Ruff:** For fast, unified linting and formatting.
+  - **import-linter:** For enforcing the inward-only dependency rule between layers.
+
+### AD-7: Framework Isolation of Domain and Application
+- **Binds:** Third-party coupling inside the inner layers.
+- **Prevents:** The Domain and Application layers importing frameworks or drivers (SQLAlchemy, Pydantic, HTTP clients, DB drivers) and thereby losing purity, testability without infrastructure dependencies, and adapter swappability — the decoupling promised in the Overview.
+- **Rule:** `domain` and `application` must not import third-party runtime libraries. Frameworks belong to `infrastructure`: SQLAlchemy models/repositories, Pydantic configuration and DTOs, and HTTP clients live there, and the inner layers reach them only through ports defined with `abc.ABC` (AD-3). Enforcement is an import-linter `forbidden` contract per layer, with `include_external_packages = true` set — without that flag the contract silently ignores external packages and passes vacuously. Each contract lands together with the dependency it guards:
+  - **Story 1.2 (Pydantic):** forbid `pydantic` (and any other runtime dependency) in `domain` and `application`.
+  - **Story 1.3 (SQLAlchemy / DB driver):** extend the forbidden set with `sqlalchemy` and the PostgreSQL driver.
+- **Evidence:** every forbidden contract must have a matching negative control in `tests/test_layers.py` — a throwaway project whose `domain` (or `application`) imports the forbidden library must report that contract as `BROKEN`. A contract without its negative control is treated as unverified.
 
 ## 3. Structural Design
 
