@@ -131,7 +131,7 @@ So that persistence contracts and flexible metadata schema are in place.
 
 **Given** the Game entity and repository port defined via abc.ABC
 **When** a migration runs
-**Then** a games table is created with a JSON/JSONB metadata column
+**Then** a games table is created with `product_id` as its primary key and a JSON/JSONB metadata column
 **And** domain exceptions (e.g., DomainError, EntityNotFound) are defined and raised by domain/application layers
 **And** the `forbidden` contract is extended to cover `sqlalchemy` and the PostgreSQL driver, with a negative-control test for each
 
@@ -147,9 +147,9 @@ So that the worker obtains the raw list of available game IDs per platform.
 
 **Acceptance Criteria:**
 
-**Given** valid market/language parameters
+**Given** the markets and language configured for the run
 **When** the adapter requests catalog IDs
-**Then** it returns game IDs for the Console, PC, and EA Play endpoints
+**Then** it returns game IDs for the Console, PC, and EA Play endpoints for each configured market
 **And** external call failures trigger retries with backoff and open the circuit breaker after a configured threshold
 
 ### Story 2.2: Hydrate Title Metadata from Microsoft
@@ -247,8 +247,9 @@ So that the database reflects the latest catalog state.
 
 **Given** a list of catalog entries
 **When** persistence runs
-**Then** new titles are inserted and existing titles are updated in place
-**And** no duplicate rows are created for existing titles
+**Then** new titles are inserted and existing titles are updated in place, keyed by `product_id` (`ON CONFLICT (product_id) DO UPDATE`)
+**And** no duplicate rows are created for existing titles: persisting the same batch twice leaves the row count and the ids unchanged
+**And** a game that gains IGDB metadata after a failed match is updated in place, not duplicated
 
 ### Story 4.2: Soft-Delete Removed Titles
 

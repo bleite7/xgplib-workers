@@ -76,6 +76,17 @@ This project adheres strictly to **Clean Code and Hexagonal Architecture (Ports 
 - **Why it binds (the trade-off):** a run is bounded by external rate limits — IGDB enforces a small per-second request cap and Microsoft hydration takes 200 ids per request (`SPEC.md:47`) — so overlapping I/O waits does not shorten the run. Async would buy the project an async test runner, async container factories and an `AsyncSession` lifecycle for no wall-clock gain. Reversing this decision is an AD change, not a local adapter choice.
 - **Evidence:** a gate test asserts that no `async def` appears under `src/domain` and `src/application` (AST walk), alongside the existing boundary tests.
 
+### AD-9: Entity Identity and Upsert Key
+- **Binds:** The identity of every persisted entity, the conflict target of every upsert, and what "the same game" means across runs.
+- **Prevents:** Two units that each pass their own tests while disagreeing about identity: an entity re-hydrated from the database carrying a freshly generated id, so the hourly run re-inserts a product that already exists; or a compensating `UNIQUE(product_id)` turning that duplicate into an `IntegrityError` the application cannot classify.
+- **Rule:**
+  1. **Identity is the store product id.** `games.product_id` — the Microsoft catalog product identifier — is the primary key. No surrogate UUID, no sequence-backed identity for games.
+  2. **Identity is immutable.** A changed `product_id` is a *different* game, never an update; no adapter or mapper may rewrite a persisted one.
+  3. **The upsert target is that key.** Repository writes are `INSERT … ON CONFLICT (product_id) DO UPDATE`, exposed as a single upsert operation. A use case must not read first to decide whether to insert or update — deciding identity is the repository's job, and read-then-write is the race that produces duplicates.
+  4. **Rehydration carries the id.** An entity loaded from the database keeps the id it was stored with; nothing constructs a game with a fresh identifier.
+  5. **IGDB's id is an attribute, never an identity.** A game exists in the catalog whether or not it matched IGDB. Matching later updates the row in place; a failed match is a row with no enrichment, not a second row and not a deleted one.
+- **Evidence:** persistence tests (Story 4.1) that (a) persist the same batch twice and assert the row count and the ids are unchanged — idempotence by construction, not by convention; (b) enrich a previously unmatched game and assert it updates in place rather than duplicating.
+
 ## 3. Structural Design
 
 ```mermaid
@@ -110,9 +121,9 @@ graph TD
 
 These are **open**, not settled. Until one is decided here, no story may settle it locally: a unit that needs one of these values raises it, it does not choose.
 
-- **Identity & upsert key** — is a game keyed by the upstream Microsoft product id or by a surrogate UUID, and what is the `ON CONFLICT` target? Blocks Story 1.3's entity and Story 4.1's persistence.
-- **Availability model** — a scalar `is_active` flag, or a set of `(market, platform, plan)`? Decides whether a title leaving Console while staying on PC can be represented at all.
+- **Availability model** — markets are decided (one run covers several configured markets), so availability must carry the market dimension; what is still open is the platform × plan grid: the three sigls endpoints (Console, PC, EA Play) do not map cleanly onto FR-1.1's platform × plan, since cloud is absent and EA Play is a benefit rather than a device. Which `(platform, plan)` rows each endpoint yields is for the Story 2.1 spike to establish.
 - **JSONB ownership** — which writer owns which namespace of the metadata column (raw Microsoft payload vs IGDB enrichment), and does a write merge or replace?
+- **Soft-deletion semantics** — with several markets per run, what "removed" means: absent from one market's fetch, or from all of them? And how a failed market fetch is prevented from being read as a removal.
 - **Transaction boundary** — one commit per sync run, or per entity? What happens to a partially hydrated batch?
 - **Resilience policy** — where retries and circuit breakers live, which library, where thresholds come from, and what "skip gracefully" (NFR-1) means for a use case. Constraint: SPEC requires circuit breakers and retries for external APIs.
 - **Configuration & secrets** — how credentials and the database URL reach the process, and the precedence between an env file and the real environment.
