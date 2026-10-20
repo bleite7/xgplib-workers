@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture Spine Validation — xgplib-workers</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c2230; --line: #2a3140;
+    --ink: #e6edf3; --muted: #9aa7b4; --crit: #ff6b6b; --high: #ffa657;
+    --med: #e3b341; --low: #7d8590; --ok: #3fb950; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 44px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 26px 0 8px; }
+  p { margin: 10px 0; }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 13px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9d1d9; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+  .meta dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; margin: 14px 0 0; }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; color: var(--ink); }
+  .verdict { border: 1px solid #6b2b2b; background: linear-gradient(180deg, #2a1516, var(--panel));
+             border-radius: 10px; padding: 20px 22px; margin: 24px 0 8px; }
+  .verdict .label { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px;
+                    color: var(--crit); font-weight: 700; }
+  .verdict p { margin: 8px 0 0; font-size: 16px; }
+  .tier { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+          text-transform: uppercase; padding: 2px 8px; border-radius: 999px; vertical-align: 2px; }
+  .tier.crit { background: rgba(255,107,107,.14); color: var(--crit); border: 1px solid rgba(255,107,107,.35); }
+  .tier.high { background: rgba(255,166,87,.14); color: var(--high); border: 1px solid rgba(255,166,87,.35); }
+  .tier.med  { background: rgba(227,179,65,.14); color: var(--med);  border: 1px solid rgba(227,179,65,.35); }
+  .tier.low  { background: rgba(125,134,144,.14); color: var(--low); border: 1px solid rgba(125,134,144,.35); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+          padding: 18px 20px; margin: 14px 0; }
+  .card.crit { border-left: 3px solid var(--crit); }
+  .card.high { border-left: 3px solid var(--high); }
+  .card.warn { border-left: 3px solid var(--med); }
+  .card.keep { border-left: 3px solid var(--ok); }
+  .card h3 { margin-top: 0; }
+  .quote { border-left: 3px solid var(--line); margin: 12px 0; padding: 2px 0 2px 14px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td.ok { color: var(--ok); } td.bad { color: var(--crit); } td.part { color: var(--med); }
+  ul { margin: 10px 0; padding-left: 20px; }
+  li { margin: 6px 0; }
+  .tail { color: var(--muted); }
+  .tail strong { color: var(--ink); }
+  .files { font-size: 13px; color: var(--muted); }
+  .files a { color: var(--accent); text-decoration: none; }
+  .foot { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line);
+          color: var(--low); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Architecture Spine Validation</h1>
+  <div class="meta">
+    <strong>xgplib-workers</strong> — formal Validate gate run
+    <dl>
+      <dt>Target</dt><dd><code>ARCHITECTURE-SPINE.md</code> @ <code>ac8aae4</code> — status <code>final</code>, updated 2026-10-20</dd>
+      <dt>Intent</dt><dd>Validate (the spine is not modified by this run)</dd>
+      <dt>Gate</dt><dd><code>lint_spine.py</code> · rubric walker · tech-currency lens · adversary lens</dd>
+      <dt>Date</dt><dd>2026-10-20</dd>
+    </dl>
+  </div>
+
+  <div class="verdict">
+    <div class="label">Gate verdict — not ready</div>
+    <p>The spine is an accurate, well-enforced constitution for <em>hexagonal layering</em> — AD-1 and AD-7 are verified true against the shipped code — but it decides none of the system seams Epics 2–4 must build against, and <code>## Deferred</code> says “None”, so every silence reads as a settled decision.</p>
+  </div>
+  <p class="tail" style="margin-top:0">Three lenses returned three NOT READY verdicts with no conflicting finding. The deterministic lint reported <strong>zero findings vacuously</strong>: there is no <code>## Stack</code> section for its version-pin pass to inspect. Findings below are consolidated by root cause; each names two units that can obey every AD and still fail to compose.</p>
+
+  <h2>Checklist scorecard</h2>
+  <table>
+    <thead><tr><th>Criterion</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Fixes the real divergence points for the level below, misses none</td><td class="bad">FAIL</td></tr>
+      <tr><td>Every AD’s Rule is enforceable and prevents its stated divergence</td><td class="part">PARTIAL</td></tr>
+      <tr><td>Nothing under Deferred could let two units diverge</td><td class="bad">FAIL</td></tr>
+      <tr><td>Named tech is verified-current</td><td class="bad">FAIL</td></tr>
+      <tr><td>Ratifies rather than contradicts the brownfield codebase</td><td class="ok">PASS — one false historical claim</td></tr>
+      <tr><td>If a spec drove it, it covers that spec’s capabilities</td><td class="bad">FAIL — CAP-2/3/4 ungoverned</td></tr>
+      <tr><td>Inherited parent spine not weakened</td><td>N/A — none exists</td></tr>
+      <tr><td>Every altitude-owned dimension decided, deferred, or open</td><td class="bad">FAIL — ~8 silent, incl. the whole operational envelope</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Critical</h2>
+
+  <div class="card crit">
+    <h3>C-1 <span class="tier crit">critical</span> — The shared entity has no identity, no conflict target, no transaction boundary</h3>
+    <p><em>Shared root cause: rubric H5 · adversary C1 · adversary C5.</em></p>
+    <p>Stories 1.3 and 4.1 can each be written compliantly and still disagree about what a game <em>is</em>. Story 1.3’s idiomatic <code>Game(id: UUID, product_id: str)</code> plus Story 4.1’s <code>ON CONFLICT (id)</code> upsert means a re-hydrated entity carries a fresh uuid — the hourly run re-inserts the same Microsoft product forever, while Story 4.1’s own test passes because it saves entities it created itself. The compensating <code>UNIQUE(product_id)</code> instead pushes an <code>IntegrityError</code> out of the adapter with no AD-5 translation path.</p>
+    <p>AD-4 describes mutation in the singular, so <code>for e in entries: repo.save(e)</code> is the most literal reading: a crash at item 2,500 leaves a half-migrated catalogue that C-2’s deactivation path turns into mass removals.</p>
+    <p><strong>Fix:</strong> one AD fixing the canonical identity (upstream product id; surrogate UUIDs forbidden; <code>UNIQUE(product_id)</code>), the upsert contract, the unit-of-work boundary per run, and the migration tool.</p>
+  </div>
+
+  <div class="card crit">
+    <h3>C-2 <span class="tier crit">critical</span> — Availability cannot be expressed, and two mutation paths can delete the catalogue</h3>
+    <p><em>Shared root cause: adversary C2 · adversary C4 · rubric M6.</em></p>
+    <p>FR-1.1 requires market × platform (PC/console/cloud) × plan. Story 2.1 returns ids <em>per endpoint</em>; Story 4.2 flips one boolean. A title leaving Console while still on PC is deactivated. The reciprocal reading (union the slices) is equally compliant and makes “added” unobservable. The entity has no room for <code>{console: yes, pc: no, market: de-DE}</code>.</p>
+    <p>Worse: Story 4.1 sets active, Story 4.2 bulk-deactivates ids absent from the fetch. A failed hydration batch under NFR-1 (“skip gracefully”) yields a smaller catalogue → mass false soft-delete, no exception raised, AD-5 satisfied.</p>
+    <p><strong>Fix:</strong> availability as a set of <code>Availability(market, platform, plan)</code> value objects in its own table; no scalar <code>is_active</code>; “soft-deleted” = empty availability set; transitions applied once per run from the union of all slices; deactivation gated on fetch completeness; a run lock.</p>
+  </div>
+
+  <div class="card crit">
+    <h3>C-3 <span class="tier crit">critical</span> — The JSONB column has two uncoordinated writers</h3>
+    <p>Ingestion stores <code>{"raw_microsoft": …}</code> (required by Story 3.3); enrichment replaces the whole column with IGDB keys. For matched titles the raw payload is destroyed; it survives only on unmatched titles — precisely the population Story 3.3 tests. AD-7 <em>prevents</em> the domain from naming the shape (Pydantic DTOs must live in infrastructure), so nothing can validate it. Key-name drift between writers means no consumer can read the column without knowing who ran last.</p>
+    <p><strong>Fix:</strong> namespaced merge-on-write document — <code>raw</code> (Microsoft, write-once) and <code>enrichment</code> (IGDB, replaceable) — one mapper in infrastructure, persistence merges by namespace key and never replaces the column; dropping a namespace you do not own is a domain error, tested.</p>
+  </div>
+
+  <div class="card crit">
+    <h3>C-4 <span class="tier crit">critical</span> — The spine governs no system seam; <code>Deferred</code> claims otherwise</h3>
+    <p><em>Shared root cause: rubric C1 · rubric C2 · rubric H8.</em></p>
+    <p>All seven ADs are about <em>how Python code is arranged</em>. No AD names a component, port, or rule for the two-step Microsoft extraction, IGDB enrichment, change detection, upserts/soft-deletes, or hourly execution — Stories 2.1 and 3.1 can pick different HTTP clients and retry styles and both stay canonical.</p>
+    <p>The operational envelope is entirely silent — deployment target, environments, PostgreSQL provisioning, what tests run against, how secrets arrive, where the unmatched-title log goes — while <code>## Deferred</code> says “None explicitly deferred”. The live symptom already exists: <code>.gitignore</code> has no <code>.env</code> pattern and that item sits in <code>deferred-work.md</code> instead of the spine.</p>
+    <p><strong>Fix:</strong> ADs for external integration, resilience, persistence, execution/scheduling, configuration &amp; secrets, operations, and testing — each <code>Binds:</code> citing CAP-/FR-/NFR- IDs — plus a Capability → Architecture Map and a populated <code>## Deferred</code>.</p>
+  </div>
+
+  <div class="card crit">
+    <h3>C-5 <span class="tier crit">critical</span> — The stack is asserted, not researched, and two implied defaults moved</h3>
+    <p><em>Shared root cause: tech-currency C1, C2, H1–H5, M2–M3.</em></p>
+    <p>No version, no Python baseline, no source anywhere; the memlog shows the stack arriving as a user direction and leaving as a decision with no lookup. Independently spot-checked during this validation:</p>
+    <ul>
+      <li><strong>SQLAlchemy 2.1.5</strong> (2026-10-16) is the current default install; 2.1.0 was the first production release (2026-09-24). <code>greenlet</code> is no longer installed by default (breaks async unless <code>sqlalchemy[asyncio]</code>), and <code>postgresql://</code> now resolves to <strong>psycopg 3</strong>.</li>
+      <li><strong><code>httpx</code></strong> has had no stable release since 2024-12-06; the maintained continuation is <strong><code>httpx2</code></strong> (Pydantic fork, 2.13.1, 2026-09-23).</li>
+      <li><strong>AD-2’s DI container is unnamed</strong> in a live four-way choice — <code>dependency-injector</code> 4.49.1, <code>dishka</code> 1.10.1, <code>punq</code> 0.9.0, <code>injector</code> 0.24.0 — and the PyPI name <code>python-dependency-injector</code> is an unrelated 1,870-byte stub.</li>
+    </ul>
+    <p><strong>Fix:</strong> add a <code>## Stack</code> table (pin / role+layer / verified date), reduce AD-6 to a pointer at it, and name the DI container with its distribution name and composition-root path.</p>
+  </div>
+
+  <h2>High</h2>
+  <div class="card high">
+    <ul>
+      <li><strong>H-1 Sync vs async undecided</strong> — fixes every port signature, the driver (<code>Session</code> vs <code>AsyncSession</code>) and the client (<code>Client</code> vs <code>AsyncClient</code>). An hourly network-bound worker reads naturally as async.</li>
+      <li><strong>H-2 Port ownership contradictory</strong> — AD-3 says domain-defined; the diagram and README put ports in <code>application</code>. Both placements pass the shipped contract, so the machinery cannot detect the divergence.</li>
+      <li><strong>H-3 AD-2 and AD-7 cannot both be satisfied as written</strong> — mainstream containers need markers on classes that live in <code>application</code>, which AD-7 forbids. Name the container, put the composition root in infrastructure, require plain constructor injection in use cases.</li>
+      <li><strong>H-4 Resilience has no AD</strong> although NFR-1 is a hard constraint in four artifacts: where retries/circuit breakers live, which library, where thresholds come from, what “skip gracefully” means for the use case.</li>
+      <li><strong>H-5 AD-7 is not mechanically enforceable as written</strong> — no “any external” wildcard; <code>forbidden_modules</code> must be exact top-level names, and <code>include_external_packages</code> is a <em>top-level session option</em>, not a contract key. The spine’s phrasing invites a config import-linter rejects.</li>
+      <li><strong>H-6 AD-5 has no retryable-vs-permanent taxonomy</strong> — an IGDB outage is indistinguishable from a no-match, and nothing requires adapters to translate third-party exceptions inward.</li>
+      <li><strong>H-7 Entrypoints may call repositories directly</strong> — infrastructure is one layer and AD-4 binds only use cases.</li>
+      <li><strong>H-8 No migration tool named</strong> while Epic 1 promises migrations.</li>
+    </ul>
+  </div>
+
+  <h2>Medium &amp; low (tail)</h2>
+  <div class="card">
+    <p class="tail"><strong>Medium:</strong> Binds are prose restatements rather than CAP-/FR-/NFR- IDs · no Consistency Conventions table (naming, id representation, UTC convention, error shape, log fields, config names) · <strong>AD-1’s historical note is factually wrong</strong> (see below) · AD-5 names no module home for the exception hierarchy · testing strategy unowned · market/language scope undecided (decides whether the persistence key is <code>(id)</code> or <code>(id, market)</code>) · flat top-level import roots unratified · frontmatter carries no <code>purpose</code>, <code>altitude</code>, <code>binds</code>, <code>sources</code> · port granularity and the 200-id batch constant unowned · Python 3.12 security-only and unratified, <code>ruff&gt;=0.6</code> floor vs 0.17.1 current, <code>pydantic-settings</code> is a separate top-level package AD-7 would miss, no dependency-provenance convention.</p>
+    <p class="tail"><strong>Low:</strong> AD-3’s “fail-fast instantiation” claim has no test · AD-4 sets no port surface · AD-1 says “fails the build” but the gate is CI + pytest · reproducibility unstated (lockfile + <code>uv sync --locked</code>) · the diagram has no composition root or scheduler node · package manager and build backend unnamed.</p>
+  </div>
+
+  <h2>Regression introduced during this cycle</h2>
+  <div class="card warn">
+    <p><strong>AD-1’s note is false.</strong> It claims the boundary tests “caught an inverted <code>layers</code> order that the declarative contract alone reported as kept (<code>37bb259</code>)”. Verified against git: the shipped order was already correct at <code>f27724c</code>, and <code>37bb259</code> never touched <code>pyproject.toml</code> — it fixed the <em>tests</em>, because an inverted order <strong>would have shipped undetected</strong>.</p>
+    <div class="quote">Corrected wording: “the review of Story 1.1 found the direction was never verified — an inverted <code>layers</code> order would have shipped reporting KEPT (<code>37bb259</code>) — so the tests are deliberate; do not remove them.”</div>
+    <p class="tail">Added by <code>cdf5ba9</code> in this same cycle; five-minute fix, worth doing before anything else.</p>
+  </div>
+
+  <h2>What the spine gets right — keep</h2>
+  <div class="card keep">
+    <ul>
+      <li><strong>AD-1</strong> as three named, mechanical enforcement layers, with the explicit instruction not to remove the subprocess tests — every part verified true against <code>pyproject.toml</code> and <code>tests/test_layers.py</code>.</li>
+      <li><strong>AD-7’s direction</strong> is the most valuable invariant in the document, and the <code>include_external_packages</code> trap it names is real. It needs enforcement, not removal.</li>
+      <li>Every brownfield fact checked is accurate: layer order, <code>root_packages</code>, the parity test, three negative controls plus a positive control, per-layer <code>src/&lt;layer&gt;</code> resolution, and the CI-gate assertions.</li>
+    </ul>
+  </div>
+
+  <h2>Recommended next step</h2>
+  <div class="card">
+    <p>An <strong>Update</strong> pass — spine changes, AD IDs stable, new decisions from AD-8 onward. Cheapest first:</p>
+    <ul>
+      <li>Fix AD-1’s false note and reword AD-7 into the enforceable form. <em>(minutes)</em></li>
+      <li>Add <code>## Stack</code> with pins and verified dates; name the DI container; populate <code>## Deferred</code>. <em>(one pass)</em></li>
+      <li>Decide the load-bearing calls: sync vs async, identity key, availability model, JSONB namespaces, transaction boundary, resilience policy, config &amp; secrets. <em>(needs your input)</em></li>
+      <li>Add the operational envelope: deployment, environments, PostgreSQL provisioning, observability, testing strategy.</li>
+    </ul>
+  </div>
+
+  <p class="files">Full evidence and paste-ready AD text:
+    <a href="reviews/review-rubric-walker.md">review-rubric-walker.md</a> ·
+    <a href="reviews/review-tech-currency.md">review-tech-currency.md</a> ·
+    <a href="reviews/review-adversary.md">review-adversary.md</a> ·
+    <a href="spine-validation-2026-10-20.md">spine-validation-2026-10-20.md</a>
+  </p>
+
+  <div class="foot">Validated with the BMad Architecture reviewer gate (lint_spine.py + rubric walker + configured finalize reviewers) against <code>ARCHITECTURE-SPINE.md</code> @ <code>ac8aae4</code>. The spine was not modified.</div>
+
+</div>
+</body>
+</html>
