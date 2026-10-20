@@ -30,7 +30,8 @@ This project adheres strictly to **Clean Code and Hexagonal Architecture (Ports 
 ### AD-2: Dependency Injection Strategy
 - **Binds:** Dependency Injection Orchestration.
 - **Prevents:** Hardcoded concrete infrastructure dependencies inside application use cases, which complicates testing and flexibility.
-- **Rule:** Dependency Injection must be orchestrated via a **DI Container framework** (rather than manual wiring). This standardizes how components receive their dependencies as the project scales, ensuring the Application layer only asks for abstractions.
+- **Rule:** Dependency Injection must be orchestrated via **`dependency-injector`** (distribution `dependency-injector`, import top-level `dependency_injector`) — not manual wiring, and not any other container. The container is declared once, in a single composition root inside `infrastructure`; `domain` and `application` classes receive their collaborators as plain constructor parameters and import nothing from the container library (AD-7). Application code never resolves services at call time and never reaches for a global container.
+- **Trap to record:** the PyPI name `python-dependency-injector` is an unrelated stub package; the library is `dependency-injector`.
 
 ### AD-3: Port (Interface) Definition Standard
 - **Binds:** Port (Interface) Definition Standard.
@@ -63,8 +64,17 @@ This project adheres strictly to **Clean Code and Hexagonal Architecture (Ports 
   1. **`forbidden_modules` is an explicit, enumerated list of top-level import names.** import-linter has no "any external package" wildcard; a library missing from the list is not enforced at all, so "and any other runtime dependency" is not a contract, it is an intention.
   2. **`include_external_packages = true` is a top-level `[tool.importlinter]` session option, not a contract key.** Without it the contracts inspect first-party modules only and pass vacuously; setting it inside a contract is a configuration error.
   3. **The list is closed against the runtime dependency set.** Every dependency declared in `[project].dependencies` must map to an entry in the forbidden list — with an explicit distribution→import-name mapping where the two differ (`pydantic-settings` → `pydantic_settings`, `pyyaml` → `yaml`) — and the gate must fail when a declared dependency has no entry. This is what keeps the rule true as dependencies grow, rather than true only for the libraries someone remembered.
-- **Rollout:** each contract lands together with the dependency it guards — Story 1.2 forbids `pydantic` in `domain` and `application`; Story 1.3 extends the set with `sqlalchemy` and the PostgreSQL driver's import name.
+- **Rollout:** each contract lands together with the dependency it guards — Story 1.2 forbids `pydantic` and `dependency_injector` (AD-2) in `domain` and `application`; Story 1.3 extends the set with `sqlalchemy` and the PostgreSQL driver's import name.
 - **Evidence:** every forbidden contract must have a matching negative control in `tests/test_layers.py` — a throwaway project whose `domain` (or `application`) imports the forbidden library must report that contract as `BROKEN`. A contract without its negative control is treated as unverified.
+
+### AD-8: Synchronous Concurrency Model
+- **Binds:** Port signatures, driver and HTTP client selection across every adapter.
+- **Prevents:** Story 2.1 building a synchronous Microsoft adapter while Story 3.1 builds an asynchronous IGDB adapter — each internally consistent, neither callable through the same port nor from the same use case — and the retrofit that follows, which rewrites every port the epics already fixed.
+- **Rule:** The system is synchronous end to end.
+  1. **Inner layers are synchronous:** every port method and every use case is declared `def`. No `async def` appears under `src/domain` or `src/application`.
+  2. **Adapters are synchronous at the boundary:** persistence uses SQLAlchemy's `Session`/`Engine`, never `AsyncSession`, on the **psycopg 3** driver in sync mode; HTTP adapters use a synchronous client. Concurrency, where an adapter genuinely needs it, is an adapter-internal detail (a thread pool inside one adapter) that leaves the port surface untouched.
+- **Why it binds (the trade-off):** a run is bounded by external rate limits — IGDB enforces a small per-second request cap and Microsoft hydration takes 200 ids per request (`SPEC.md:47`) — so overlapping I/O waits does not shorten the run. Async would buy the project an async test runner, async container factories and an `AsyncSession` lifecycle for no wall-clock gain. Reversing this decision is an AD change, not a local adapter choice.
+- **Evidence:** a gate test asserts that no `async def` appears under `src/domain` and `src/application` (AST walk), alongside the existing boundary tests.
 
 ## 3. Structural Design
 
@@ -97,7 +107,18 @@ graph TD
 ```
 
 ## 4. Deferred Decisions
-- *None explicitly deferred at this stage.*
+
+These are **open**, not settled. Until one is decided here, no story may settle it locally: a unit that needs one of these values raises it, it does not choose.
+
+- **Identity & upsert key** — is a game keyed by the upstream Microsoft product id or by a surrogate UUID, and what is the `ON CONFLICT` target? Blocks Story 1.3's entity and Story 4.1's persistence.
+- **Availability model** — a scalar `is_active` flag, or a set of `(market, platform, plan)`? Decides whether a title leaving Console while staying on PC can be represented at all.
+- **JSONB ownership** — which writer owns which namespace of the metadata column (raw Microsoft payload vs IGDB enrichment), and does a write merge or replace?
+- **Transaction boundary** — one commit per sync run, or per entity? What happens to a partially hydrated batch?
+- **Resilience policy** — where retries and circuit breakers live, which library, where thresholds come from, and what "skip gracefully" (NFR-1) means for a use case. Constraint: SPEC requires circuit breakers and retries for external APIs.
+- **Configuration & secrets** — how credentials and the database URL reach the process, and the precedence between an env file and the real environment.
+- **Operational envelope** — deployment target, environments, how PostgreSQL is provisioned and what tests run against, and where the unmatched-title log for manual review is written.
+- **Stack pins** — exact versions, Python baseline, migration tool, HTTP client library, and the date each was verified against the web.
+- **Testing strategy** — port fakes vs recorded HTTP fixtures, ephemeral PostgreSQL, coverage gate.
 
 ---
 *Generated by BMad Architecture Skill.*

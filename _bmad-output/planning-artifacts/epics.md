@@ -42,8 +42,9 @@ FR-3: Data Storage & State Management
 ### Additional Requirements
 
 - Hexagonal boundaries enforced by folder convention (src/domain, src/application, src/infrastructure) plus an import-linter `layers` contract in `pyproject.toml`, proven by negative-control tests in `tests/test_layers.py`. Ruff covers style and formatting only.
-- Inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries; guarded by an import-linter `forbidden` contract (`include_external_packages = true`) that grows as dependencies land (Story 1.2, Story 1.3).
-- Dependency Injection orchestrated via a DI container framework.
+- Inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries; guarded by an import-linter `forbidden` contract whose `forbidden_modules` is an enumerated list (with `include_external_packages = true` as a top-level session option) that grows as dependencies land and is closed against `[project].dependencies` (Story 1.2, Story 1.3).
+- Dependency Injection orchestrated via `dependency-injector`, declared once in the infrastructure composition root; inner layers take plain constructor parameters.
+- The system is synchronous end to end (AD-8): ports and use cases are `def`, persistence uses `Session` on psycopg 3, HTTP adapters are synchronous.
 - Ports defined with Python native `abc.ABC`.
 - Use cases orchestrate state mutation imperatively (retrieve entity → invoke domain logic → call port `save`).
 - Custom Domain Exceptions raised in domain/application; adapters/entrypoints translate them to infra responses.
@@ -114,7 +115,8 @@ So that use cases receive dependencies as abstractions without hardcoded infrast
 **Given** a config file with required values
 **When** the worker starts
 **Then** config is validated via Pydantic and invalid config fails fast
-**And** the DI container resolves ports to their adapter implementations
+**And** the `dependency-injector` container, declared in the infrastructure composition root, resolves ports to their adapter implementations
+**And** no module under `src/domain` or `src/application` imports `dependency_injector`
 **And** an import-linter `forbidden` contract for `src/domain` and `src/application` forbids an enumerated list of top-level import names, with `include_external_packages = true` set at the top of `[tool.importlinter]`
 **And** the forbidden list is closed against `[project].dependencies`: a test fails when a declared runtime dependency has no entry in the list
 **And** a negative-control test proves that contract breaks when `domain` imports `pydantic`

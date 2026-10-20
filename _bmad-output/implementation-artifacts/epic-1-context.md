@@ -16,7 +16,7 @@ Establish the runnable hexagonal worker base that every later capability depends
 
 - Enforce Hexagonal Architecture and Clean Code so external APIs and the database stay decoupled from core synchronization logic.
 - Layer boundaries follow folder convention (`src/domain`, `src/application`, `src/infrastructure`); domain and application code must not import infrastructure. Enforcement is mechanical: an import-linter `layers` contract in `pyproject.toml` plus executable negative controls in `tests/test_layers.py`. Ruff covers style and formatting only, and those boundary tests are intentional, not removable weight.
-- The inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries. SQLAlchemy, Pydantic and HTTP/DB drivers live in `infrastructure` and are reached through ports. Guarded by an import-linter `forbidden` contract with `include_external_packages = true`, added in Story 1.2 (Pydantic) and extended in Story 1.3 (SQLAlchemy/driver).
+- The inner layers stay framework-free: `domain` and `application` import no third-party runtime libraries. SQLAlchemy, Pydantic and HTTP/DB drivers live in `infrastructure` and are reached through ports. Guarded by an import-linter `forbidden` contract whose `forbidden_modules` is an enumerated list of top-level import names, with `include_external_packages = true` as a top-level session option; the list is closed against `[project].dependencies` by a failing test. Added in Story 1.2 (Pydantic, `dependency_injector`) and extended in Story 1.3 (SQLAlchemy/driver).
 - Configuration (PostgreSQL connection, IGDB and Microsoft credentials, cron interval) is validated at startup and fails fast on invalid or missing values.
 - Dependencies are supplied as abstractions; no hardcoded concrete infrastructure inside use cases.
 - Domain and application layers signal errors via explicit custom domain exceptions; translation into infrastructure concerns (logging, queue NACKs, HTTP codes) happens only at the outermost adaptation layer.
@@ -28,7 +28,8 @@ Establish the runnable hexagonal worker base that every later capability depends
 
 - Hexagonal Architecture (Ports and Adapters) with the dependency rule pointing inward toward the domain; the domain knows nothing of the application layer, and the application layer knows nothing of infrastructure.
 - Ports are defined with Python's native `abc.ABC`, giving fail-fast instantiation when an adapter omits a required method.
-- Dependency injection is orchestrated through a DI container framework (not manual wiring), standardizing how components receive abstractions as the project scales.
+- Dependency injection is orchestrated through **`dependency-injector`** (not manual wiring, not another container): the container is declared once in the infrastructure composition root, and use cases take plain constructor parameters so nothing under `domain` or `application` imports the container.
+- The system is synchronous end to end (AD-8): port methods and use cases are declared `def`, persistence uses SQLAlchemy `Session`/`Engine` on psycopg 3 in sync mode, and HTTP adapters use synchronous clients. Concurrency, if ever needed, stays inside an adapter.
 - Use cases orchestrate state mutation imperatively: retrieve entities through ports, invoke domain logic on the entity, then explicitly call the port to persist the new state.
 - Foundational stack: SQLAlchemy for ORM and persistence, Pydantic for DTOs and configuration validation, Ruff for unified linting and formatting, import-linter for the layer contracts.
 - Data model: a Game domain entity, an `abc.ABC` repository port, and migrations that create a games table with a JSON/JSONB metadata column.
