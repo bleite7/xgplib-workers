@@ -29,5 +29,3 @@ modules:
     sha: 97298b22fee1c7e482710d3a8414adb5cfccccd9
 ides:
   - opencode
-  - claude-code
-  - github-copilot
